@@ -4,6 +4,15 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>SMARTIE Quote Desk — Smart India Enterprises</title>
+<meta name="theme-color" content="#12161A">
+<meta name="description" content="Internal quoting and stock tool for Smart India Enterprises.">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<meta name="apple-mobile-web-app-title" content="Quote Desk">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png" sizes="192x192" type="image/png">
+<link rel="apple-touch-icon" href="apple-touch-180.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -58,6 +67,8 @@ header.mast{
 .tier button[aria-pressed=true]{background:var(--saffron);color:#fff}
 .tier-lbl{font-family:var(--cond);font-weight:600;font-size:12.5px;color:#7C8792;margin-right:4px}
 .rev{font-family:var(--mono);font-size:11px;color:#7C8792;letter-spacing:.02em}
+#btnInstall{padding:6px 13px;font-size:13px}
+.offline{background:var(--warn);color:#fff;text-align:center;padding:6px 12px;font-size:13px;font-weight:600}
 
 /* ---------- tabs ---------- */
 nav.tabs{background:var(--panel);border-bottom:1px solid var(--rule);position:sticky;top:53px;z-index:55}
@@ -464,6 +475,7 @@ select{cursor:pointer}
 <header class="mast">
   <div class="mast-in">
     <div class="brand"><i></i><i></i><b>SMARTIE</b><span>Quote Desk</span></div>
+    <button class="btn pri sm" id="btnInstall" hidden>Install app</button>
     <span class="rev" id="revLbl">rates 2026-27</span>
     <div class="tier" role="group" aria-label="Price tier">
       <span class="tier-lbl">Rate for</span>
@@ -2217,6 +2229,7 @@ $("#btnClear").onclick = () => {
   renderDocket();
 };
 const PDF_SRC = [
+  "jspdf.umd.min.js",                       // shipped alongside the app; works offline
   "https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js",
   "https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js",
   "https://unpkg.com/jspdf@2.5.1/dist/jspdf.umd.min.js"
@@ -2468,11 +2481,45 @@ $("#btnWa").onclick = async () => {
   toast(ok ? "Quotation copied — paste it into WhatsApp" : "Copy failed — try Print instead");
 };
 
+/* ---------- installing, updating and working offline ---------- */
+let installPrompt=null;
+window.addEventListener("beforeinstallprompt", e=>{
+  e.preventDefault(); installPrompt=e;
+  const b=$("#btnInstall"); if(b) b.hidden=false;
+});
+$("#btnInstall").onclick = async () => {
+  if(!installPrompt) return;
+  installPrompt.prompt();
+  const {outcome} = await installPrompt.userChoice;
+  installPrompt=null; $("#btnInstall").hidden=true;
+  if(outcome==="accepted") toast("Installed — open it from your home screen");
+};
+window.addEventListener("appinstalled", ()=>{ $("#btnInstall").hidden=true; });
+
+if("serviceWorker" in navigator && location.protocol.startsWith("http")){
+  window.addEventListener("load", ()=>{
+    navigator.serviceWorker.register("sw.js").catch(()=>{ /* opened as a plain file */ });
+  });
+}
+
+function netFlag(){
+  let bar=$("#netBar");
+  if(navigator.onLine){ if(bar) bar.remove(); return; }
+  if(bar) return;
+  bar=document.createElement("div");
+  bar.id="netBar"; bar.className="offline";
+  bar.textContent="No connection — quoting and PDFs still work. Stock will sync when you are back online.";
+  document.querySelector("header.mast").after(bar);
+}
+window.addEventListener("online", ()=>{ netFlag(); if(state.sync.url) syncStock(true); });
+window.addEventListener("offline", netFlag);
+
 (async function init(){
   const saved = await Store.get(KEY);
   if(saved){ state.ov=saved.ov||{}; state.rev=saved.rev||state.rev; state.effective=saved.effective||state.effective;
     state.custom=saved.custom||{}; state.terms=saved.terms||null; state.notes=saved.notes||null;
     state.stock=saved.stock||{}; if(saved.sync) Object.assign(state.sync, saved.sync); }
+  netFlag();
   $("#revLbl").textContent = "rates "+state.rev;
   const d=new Date(), fy = d.getMonth()>=3 ? d.getFullYear() : d.getFullYear()-1;
   $("#qRef").placeholder = `SIE/${fy}-${String(fy+1).slice(2)}/001`;
