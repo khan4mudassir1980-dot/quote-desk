@@ -1,0 +1,28 @@
+{
+  "firestore": {
+    "rules": "firestore.rules",
+    "indexes": "firestore.indexes.json"
+  },
+  "hosting": {
+    "public": ".",
+    "ignore": [
+      "firebase.json",
+      "firestore.rules",
+      "firestore.indexes.json",
+      "**/.*",
+      "**/node_modules/**",
+      "**/*.md"
+    ],
+    "headers": [
+      {
+        "source": "/sw.js",
+        "headers": [{ "key": "Cache-Control", "value": "no-cache, no-store, must-revalidate" }]
+      },
+      {
+        "source": "**/*.@(png|woff2)",
+        "headers": [{ "key": "Cache-Control", "value": "public, max-age=604800" }]
+      }
+    ],
+    "rewrites": [{ "source": "**", "destination": "/index.html" }]
+  }
+}

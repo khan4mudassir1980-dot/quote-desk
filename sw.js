@@ -1,18 +1,27 @@
 /* SMARTIE Quote Desk — offline cache.
    Bump CACHE whenever you upload a new index.html, so every phone picks
    up the new version instead of serving the old one from its cache. */
-const CACHE = 'smartie-quote-desk-v2';
+const CACHE = 'smartie-quote-desk-v7e';
 const SHELL = [
   './',
   './index.html',
   './manifest.webmanifest',
   './jspdf.umd.min.js',
   './icon-192.png',
-  './icon-512.png'
+  './icon-512.png',
+  './maskable-192.png',
+  './maskable-512.png',
+  './apple-touch-180.png',
+  './favicon-32.png',
+  './favicon-16.png'
 ];
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)).then(() => self.skipWaiting()));
+});
+
+self.addEventListener('message', e => {
+  if (e.data === 'skipWaiting') self.skipWaiting();     // page asks us to take over now
 });
 
 self.addEventListener('activate', e => {
@@ -27,7 +36,12 @@ self.addEventListener('fetch', e => {
   const req = e.request;
   if (req.method !== 'GET') return;                       // never cache a sync push
   const url = new URL(req.url);
-  if (url.hostname.includes('script.google.com')) return;  // stock sync always goes to the network
+  // Never cache sign-in or database traffic — it must always be live, and
+  // caching a token or a query result would be both stale and unsafe.
+  const LIVE = ['script.google.com','firestore.googleapis.com','identitytoolkit.googleapis.com',
+                'securetoken.googleapis.com','firebaseinstallations.googleapis.com',
+                'firebase.googleapis.com','www.googleapis.com'];
+  if (LIVE.some(h => url.hostname.includes(h))) return;
 
   // Network first for the page itself, so a new upload is picked up promptly.
   if (req.mode === 'navigate') {

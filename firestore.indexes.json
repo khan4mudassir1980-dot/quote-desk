@@ -1,0 +1,12 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "quotations",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "at", "order": "DESCENDING" }
+      ]
+    }
+  ],
+  "fieldOverrides": []
+}
