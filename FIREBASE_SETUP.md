@@ -4,7 +4,7 @@ Your Firebase project already works. This covers what changed in V7 and what
 you must do to bring it live.
 
 **Project:** `smartie-quote-desk`
-**Service-worker cache:** `smartie-quote-desk-v7e`
+**Service-worker cache:** `smartie-quote-desk-v8a`
 
 ---
 
@@ -333,3 +333,101 @@ counter is left alone and `lastIssued` is no longer overwritten with nothing.
 
 **Percentage fallback.** An empty string is treated as missing rather than as
 zero, because `Number("")` is `0`. A real zero is still a valid 0%.
+
+
+---
+
+## Patch notes — V8
+
+**Categories.** Products are now shelved by what they are, not by the internal
+price group they happened to be filed under. Fourteen categories: sliding, swing,
+rolling shutter and high-speed motors, boom barriers, garage doors, glass doors,
+kits, accessories, sensors, controllers, hardware, profiles, and services.
+
+A category is **metadata**, laid over the existing product key. A product is
+still `group|model`, so stock figures, old quotations and history stay attached
+no matter how you re-file it. Admins can rename, reorder, archive and create
+categories in Products, and set any product's category when editing it. All of it
+syncs through `teamSettings/categories`.
+
+**Catalogue page.** One place with everything: a sticky search across all 403
+products, collapsible categories with counts, a recently-used strip, and the four
+size calculators grouped at the bottom. The old Motors / Gate hardware / Find a
+rate split is gone.
+
+**Navigation.** A five-slot bottom bar on mobile — Catalogue, Stock, Purchase,
+Quotation, More — with everything else behind More. The same structure appears as
+a row on desktop, so nothing exists in one and not the other. Icons are drawn as
+SVG, not emoji.
+
+**Purchase requirements.** The urgency cards are now the only way to set urgency;
+the old dropdown that looked like a second control has gone. Filters sit in their
+own labelled block that says plainly it only changes what you see, with a Clear
+filters button. The catalogue picker is removed — requirements are typed in your
+own words. Added by is taken from your signed-in account and cannot be edited.
+
+**Install.** Only in the More drawer, never the header. It remembers being
+installed, checks all three display modes plus iOS, and disappears for good once
+the app is installed.
+
+**Back to top** appears after scrolling and sits clear of both the quotation bar
+and the navigation. Opening a section always starts at the top; going Back returns
+you to where you were.
+
+**Products.** The full-width "prices need changing" banner is replaced by a quiet
+"Needs review" button with a count.
+
+Nothing was removed: all 403 products, both Firebase and local modes, stock,
+purchase history, customers, quotation history, drafts and offline all behave as
+before.
+
+
+---
+
+## Patch notes — V8A
+
+**Republish `firestore.rules`.** The rules now carry an explicit block for
+`teamSettings/categories` — active members read it, only an administrator writes
+it, and it can never be deleted. Without this, every category change is refused.
+The header reads V8A so you can tell which version is published.
+
+**Category sync failures are visible.** They used to be swallowed. If a change
+cannot be shared you are told plainly that it saved on this device only, and
+staff are told that only an administrator can share category changes.
+
+**Install fixed.** `showInstall()` was still looking for `#btnInstall`, which V8
+removed — so the option never appeared. It now targets `#drawInstall` in the More
+menu. `INSTALLED_FLAG` was also referenced without ever being declared, which
+would have thrown the moment anyone installed. Both are corrected: the flag is
+declared, saved after a successful install, and read on every start. Install is
+hidden in standalone, fullscreen, minimal-ui and iOS home-screen modes, and shows
+only when a real `beforeinstallprompt` is waiting. It never appears in the header.
+
+**Archived categories now behave.** Archiving hides the category and moves its
+products to *Other Products / Needs categorisation*, writing each product's new
+`categoryId` to Firestore. Product ids, stock keys and past quotations are
+untouched, so nothing loses its history. Restoring a category creates no
+duplicates — products stay where they were re-filed until you move them back.
+Archived categories remain listed in Products administration with a Restore
+button.
+
+**Cancelled requirements are separate from received.** Cancelled has been removed
+from the active status filter, where it could never match anything. Purchase
+history has its own Outcome filter — received and cancelled, received only, or
+cancelled only. Cancelling records `cancelledBy` and `cancelledAt`, clears any
+received data, and both lists redraw immediately. A cancelled row shows
+"not received" rather than inventing a quantity, and reports who cancelled it and
+when instead of "Received by unnamed". Reopening a cancelled item works, and
+never refunds stock that was never added.
+
+**Duplicates.** A product is a duplicate only when its model number matches, case
+and punctuation ignored. Two products with similar descriptions but different
+model numbers are two products and are both kept. The catalogue shows each model
+once.
+
+**New icons.** All seven regenerated from the blue Q artwork — the gradient Q,
+circuit lines, purple corner and central SIE mark, with no text. The maskable
+versions carry 22% padding; I measured every ink pixel against Android's circular,
+squircle and rounded-square masks and none of them clip. The mark shown in the app
+header and on the About screen is the same artwork, so the home screen and the app
+match.

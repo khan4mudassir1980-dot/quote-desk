@@ -1,6 +1,6 @@
 rules_version = '2';
 
-// SMARTIE Quote Desk — production Firestore rules (V7, patched)
+// SMARTIE Quote Desk — production Firestore rules (V8A)
 // ---------------------------------------------------------------------------
 // Paste this whole file into Firebase console -> Firestore Database -> Rules,
 // then press Publish. Never leave the project in test mode.
@@ -183,6 +183,15 @@ service cloud.firestore {
     match /teamSettings/company {
       allow read: if member();
       allow create, update: if admin();
+      allow delete: if false;
+    }
+
+    // Catalogue categories: names, order and archived flags. Products are not
+    // stored here — each product carries its own categoryId.
+    match /teamSettings/categories {
+      allow read:   if member();
+      allow create, update: if admin()
+                    && request.resource.data.map is map;
       allow delete: if false;
     }
 

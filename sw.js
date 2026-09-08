@@ -1,7 +1,7 @@
 /* SMARTIE Quote Desk — offline cache.
    Bump CACHE whenever you upload a new index.html, so every phone picks
    up the new version instead of serving the old one from its cache. */
-const CACHE = 'smartie-quote-desk-v7e';
+const CACHE = 'smartie-quote-desk-v8a';
 const SHELL = [
   './',
   './index.html',
