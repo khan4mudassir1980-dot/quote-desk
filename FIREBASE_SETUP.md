@@ -4,12 +4,40 @@ Your Firebase project already works. This covers what you must do to bring the
 current build live, followed by the history of every earlier release.
 
 **Project:** `smartie-quote-desk`
-**Current version:** V8B2
-**Service-worker cache:** `smartie-quote-desk-v8b2`
+**Current version:** V8C
+**Service-worker cache:** `smartie-quote-desk-v8c`
 
 ---
 
-## V8B2 — what you must do
+## V8C — what you must do
+
+V8C keeps all existing products, prices, users, stock, purchases, parties and
+quotations. It adds manual stock metadata and team-synced pinned stock.
+
+### 1. Publish the V8C rules
+
+From PowerShell opened inside this extracted folder:
+
+```powershell
+firebase.cmd deploy --only firestore:rules --project smartie-quote-desk
+```
+
+The rules add the safe `pin` stock action. No collection is deleted or renamed.
+
+`firestore.indexes.json` now contains only the three composite indexes Firebase
+actually needs. The two unnecessary single-field entries that previously caused
+HTTP 400 have been removed. If your three composite indexes are already live,
+you do not need to deploy indexes again.
+
+### 2. Upload the V8C files
+
+Replace the repository files with the contents of this ZIP and commit them.
+The cache name changed to `smartie-quote-desk-v8c`, so phones will receive the
+new build through the normal **Update available** flow.
+
+---
+
+## V8B2 — earlier release instructions
 
 Two things, and only two. Everything else is already in the ZIP.
 
@@ -701,3 +729,25 @@ quotation still keeps its own copy of the party details, so editing the party
 later never rewrites an old quotation.
 
 **Service worker.** Cache renamed `smartie-quote-desk-v8b2`.
+
+---
+
+## Patch notes — V8C
+
+* The mobile quotation summary bar is shown only on **Products**; all other
+  bottom-navigation sections remain uncluttered.
+* **Catalogue** is now labelled **Products** throughout the interface.
+* Product and category administration now share one **Products & Categories**
+  screen. A category can also be created and selected while adding a product,
+  and an empty new category immediately appears on the Products screen.
+* Stock can be attached to an existing product or entered manually. Manual
+  records retain their name, model, category and unit, and can later be linked
+  to a saved product.
+* Stock cards show a prominent dark **available** quantity, reorder level,
+  category, last update and direct Stock in / Stock out / Edit controls.
+* Up to 15 items can be pinned into **Frequently Tracked**, reordered with the
+  arrow controls and synced with the team through Firebase.
+* The mobile masthead now keeps the full **SMARTIE Quote Desk** name visible.
+* The two invalid single-field index declarations were removed; only the three
+  required composite indexes remain.
+* Service-worker cache renamed `smartie-quote-desk-v8c`.

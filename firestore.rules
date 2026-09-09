@@ -1,6 +1,6 @@
 rules_version = '2';
 
-// SMARTIE Quote Desk — production Firestore rules (V8B)
+// SMARTIE Quote Desk — production Firestore rules (V8C)
 // ---------------------------------------------------------------------------
 // Paste this whole file into Firebase console -> Firestore Database -> Rules,
 // then press Publish. Never leave the project in test mode.
@@ -17,8 +17,8 @@ rules_version = '2';
 //   * An issued quotation number can never be edited or re-used.
 //   * A stock movement, once written, is a permanent record.
 //
-// New in V8B: the stockMoves ledger. Nothing that existed before is renamed
-// or removed, so V8A data keeps working exactly as it did.
+// V8C adds team-synced pinned stock and manual stock metadata. Nothing that
+// existed before is renamed or removed, so earlier data keeps working.
 // ---------------------------------------------------------------------------
 
 service cloud.firestore {
@@ -84,14 +84,14 @@ service cloud.firestore {
                     && request.resource.data.min is number && request.resource.data.min >= 0
                     && request.resource.data.t is number
                     && request.resource.data.byUid == mine()
-                    && (admin() || request.resource.data.lastAction in ['in','out','min','add']);
+                    && (admin() || request.resource.data.lastAction in ['in','out','min','add','pin']);
       allow update: if member()
                     && request.resource.data.q is number   && request.resource.data.q >= 0
                     && request.resource.data.min is number && request.resource.data.min >= 0
                     && request.resource.data.t is number
                     && request.resource.data.byUid == mine()
                     && request.resource.data.key == resource.data.key
-                    && (admin() || request.resource.data.lastAction in ['in','out','min','add']);
+                    && (admin() || request.resource.data.lastAction in ['in','out','min','add','pin']);
       // A quantity is archived (off = 1), never deleted, so its ledger still
       // makes sense. Only an admin may remove the document itself.
       allow delete: if admin();
