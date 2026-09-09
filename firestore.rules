@@ -1,19 +1,24 @@
 rules_version = '2';
 
-// SMARTIE Quote Desk — production Firestore rules (V8A)
+// SMARTIE Quote Desk — production Firestore rules (V8B)
 // ---------------------------------------------------------------------------
 // Paste this whole file into Firebase console -> Firestore Database -> Rules,
 // then press Publish. Never leave the project in test mode.
 //
 //   * Nobody who is not signed in reads or writes anything.
 //   * A signed-in person must also have a /users document with active = true.
-//   * Staff run the business: quotations, customers, stock, purchase records,
-//     and taking the next quotation number.
-//   * Only admins touch products, prices, accounts and company settings.
+//   * Staff run the business: quotations, parties, stock in and out, purchase
+//     records, and taking the next quotation number.
+//   * Only admins touch products, categories, accounts, company settings,
+//     direct stock corrections and anything destructive.
 //   * Nobody promotes themselves to admin.
 //   * A missing product price is null and stays null. It is never silently
 //     accepted as zero.
 //   * An issued quotation number can never be edited or re-used.
+//   * A stock movement, once written, is a permanent record.
+//
+// New in V8B: the stockMoves ledger. Nothing that existed before is renamed
+// or removed, so V8A data keeps working exactly as it did.
 // ---------------------------------------------------------------------------
 
 service cloud.firestore {
@@ -63,18 +68,53 @@ service cloud.firestore {
                     && priceOk(request.resource.data.contractor)
                     && priceOk(request.resource.data.client)
                     && request.resource.data.active is bool;
+      // Archiving is the ordinary route; deletion stays available to an admin
+      // for a product that was created by mistake.
       allow delete: if admin();
     }
 
-    // ---------------- stock ----------------
+    // ---------------- stock quantities ----------------
+    // Staff move stock in and out and set a reorder level. Only an admin
+    // corrects a figure outright or stops tracking an item, and the rule
+    // checks the recorded action rather than trusting the interface.
     match /stock/{key} {
       allow read: if member();
-      allow create, update: if member()
+      allow create: if member()
                     && request.resource.data.q is number   && request.resource.data.q >= 0
                     && request.resource.data.min is number && request.resource.data.min >= 0
                     && request.resource.data.t is number
-                    && request.resource.data.byUid == mine();
+                    && request.resource.data.byUid == mine()
+                    && (admin() || request.resource.data.lastAction in ['in','out','min','add']);
+      allow update: if member()
+                    && request.resource.data.q is number   && request.resource.data.q >= 0
+                    && request.resource.data.min is number && request.resource.data.min >= 0
+                    && request.resource.data.t is number
+                    && request.resource.data.byUid == mine()
+                    && request.resource.data.key == resource.data.key
+                    && (admin() || request.resource.data.lastAction in ['in','out','min','add']);
+      // A quantity is archived (off = 1), never deleted, so its ledger still
+      // makes sense. Only an admin may remove the document itself.
       allow delete: if admin();
+    }
+
+    // ---------------- stock movement ledger ----------------
+    // Written in the same transaction as the quantity above. Once a movement
+    // is recorded it is permanent: nobody edits or deletes history.
+    match /stockMoves/{id} {
+      allow read: if member();
+      allow create: if member()
+                    && request.resource.data.id == id
+                    && request.resource.data.key is string
+                    && request.resource.data.action in ['in','out','set','min','add','archive']
+                    && request.resource.data.prev is number
+                    && request.resource.data.next is number
+                    && request.resource.data.next >= 0
+                    && request.resource.data.at is number
+                    && request.resource.data.byUid == mine()
+                    // only an admin records a correction or stops tracking
+                    && (admin() || request.resource.data.action in ['in','out','min','add']);
+      allow update: if false;
+      allow delete: if false;
     }
 
     // ---------------- purchase requirements and history ----------------
@@ -86,14 +126,15 @@ service cloud.firestore {
                     && request.resource.data.updated is number;
       allow update: if member()
                     && request.resource.data.id == id
+                    && request.resource.data.qty is number && request.resource.data.qty > 0
                     && request.resource.data.updated is number;
-      allow delete: if admin() || (member() && resource.data.upUid == mine());
+      // Staff cancel a requirement; only an admin removes the record.
+      allow delete: if admin();
     }
 
-    // ---------------- customers ----------------
-    // Staff may add and use parties. Only an admin may delete one.
-    // Staff may add a party and top up its details from a quotation, but only
-    // an admin may rewrite or archive one that already exists.
+    // ---------------- parties (clients, dealers, contractors) ----------------
+    // Staff may add a party and top up its details from a quotation. Only an
+    // admin may rewrite or archive one that already exists, or delete it.
     match /customers/{id} {
       allow read:   if member();
       allow create: if member()
@@ -124,7 +165,8 @@ service cloud.firestore {
                     && request.resource.data.total is number;
       allow update: if admin()
                     && touched().hasOnly(['status','cancelledBy','cancelledAt'])
-                    && request.resource.data.no == resource.data.no;
+                    && request.resource.data.no == resource.data.no
+                    && request.resource.data.total == resource.data.total;
       allow delete: if false;
     }
 
@@ -179,7 +221,8 @@ service cloud.firestore {
       allow delete: if false;          // the counter is never deleted
     }
 
-    // Company details, terms and notes — everything the quotation prints.
+    // Company details, terms, notes, payment terms, warranty, footer note and
+    // the default reorder level — everything the quotation prints or assumes.
     match /teamSettings/company {
       allow read: if member();
       allow create, update: if admin();

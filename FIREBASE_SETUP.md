@@ -1,10 +1,58 @@
-# SMARTIE Quote Desk V7 — setup and deployment
+# SMARTIE Quote Desk — setup and deployment
 
-Your Firebase project already works. This covers what changed in V7 and what
-you must do to bring it live.
+Your Firebase project already works. This covers what you must do to bring the
+current build live, followed by the history of every earlier release.
 
 **Project:** `smartie-quote-desk`
-**Service-worker cache:** `smartie-quote-desk-v8a`
+**Current version:** V8B2
+**Service-worker cache:** `smartie-quote-desk-v8b2`
+
+---
+
+## V8B2 — what you must do
+
+Two things, and only two. Everything else is already in the ZIP.
+
+### 1. Publish the updated rules and indexes
+
+**Neither V8B1 nor V8B2 changes `firestore.rules` or
+`firestore.indexes.json`. If you have already published the V8B versions,
+there is nothing to deploy again — skip to step 2.**
+
+Coming straight from V8A, publish them now. V8B added one new collection,
+`stockMoves`, which holds the stock movement ledger; until the rules are
+published every stock movement is refused. Nothing existing is renamed or
+removed, so all your current data keeps working exactly as it does today.
+
+From a terminal in the folder that holds `firebase.json`:
+
+```
+firebase login
+firebase use smartie-quote-desk
+firebase deploy --only firestore:rules,firestore:indexes
+```
+
+Or, without the CLI: Firebase console -> **Firestore Database** -> **Rules**,
+paste the whole of `firestore.rules`, **Publish**. Then **Indexes** ->
+**Composite** and add the four listed in `firestore.indexes.json`.
+
+**Both must be deployed once, on the way from V8A.** Rules, because
+`stockMoves` is refused without them and because stock corrections are
+admin-only server-side. Indexes, because the movement ledger and the
+party-filtered history are ordered queries. Going from V8B or V8B1 to V8B2
+needs neither — the files are unchanged.
+
+### 2. Upload the files and let each phone update
+
+Replace every file in the repository with the contents of this ZIP and commit.
+`sw.js` is bumped to `smartie-quote-desk-v8b2`, so each phone shows
+**Update available — Refresh** the next time it is opened. A phone with an
+unfinished quotation on screen is asked to confirm before it reloads; the draft
+is kept either way.
+
+Nothing else is required. No migration, no re-initialisation, no data reset.
+Your products, prices, categories, users, stock figures, purchase requirements,
+parties, quotations and the quotation counter are all left exactly as they are.
 
 ---
 
@@ -122,10 +170,11 @@ awaiting your decision.
 | --- | --- | --- |
 | `users/{uid}` | admin only | name, email, role, active |
 | `products/{group_model}` | admin only | model, name, spec, group, unit, gst, dealer, contractor, client (nullable), active |
-| `stock/{group\|model}` | any active member | q, min, t, by, byUid |
+| `stock/{group\|model}` | staff may move stock in and out and set a reorder level; only an admin corrects a figure or stops tracking | q, min, t, lastAction, by, byUid, serverAt |
+| `stockMoves/{id}` | any active member creates; nobody edits or deletes | id, key, group, model, name, action, prev, delta, next, min, note, by, byUid, at, serverAt |
 | `purchase/{id}` | any active member | qty, urgency, status, received, rcvQty, stocked |
-| `customers/{id}` | staff create and update; admin deletes | name, contact, phone, email, gstin, city, address, notes |
-| `quotations/{id}` | staff create; admin may only mark cancelled | no, party, lines, tier, totals, byUid, at |
+| `customers/{id}` | staff create and update; admin edits archived ones and deletes | id, name, type, contact, phone, email, gstin, city, address, notes, archived, byUid, serverAt |
+| `quotations/{id}` | staff create; admin may only mark cancelled | no, party, partyId, lines, tier, gst, gstPct, subtotal, total, snap, byUid, at, serverAt |
 | `teamSettings/numbering` | staff may only take the next number; admin sets prefix and year | prefix, fy, next, pad, lastIssued |
 
 Document ids are generated. A quotation number contains `/`, which a Firestore
@@ -431,3 +480,224 @@ versions carry 22% padding; I measured every ink pixel against Android's circula
 squircle and rounded-square masks and none of them clip. The mark shown in the app
 header and on the About screen is the same artwork, so the home screen and the app
 match.
+
+---
+
+## Patch notes — V8B
+
+**Deploy rules and indexes.** `firestore.rules` is republished for the new
+`stockMoves` collection and for the tightened stock rules;
+`firestore.indexes.json` gains three composite indexes. Nothing else in Firebase
+changes, and no existing collection is renamed, reset or migrated.
+
+**The mobile quotation panel.** Opening the quotation used to leave the bottom
+navigation unreachable and the panel itself half under the bar. The panel and
+its backdrop now both stop exactly above the navigation, which stays on top and
+clickable the whole time. Tapping another tab closes the quotation and opens
+that section — previously the tap was undone a moment later by the history entry
+the close had queued, so it looked as though nothing happened. Tapping Quotation
+again closes it. Android Back closes the quotation first and leaves you on the
+section you were on. The panel scrolls to the top every time it opens, keeps
+"Back to products" pinned at the top, freezes the page behind it, and carries
+Android safe-area spacing at the bottom. The running-total bar was also sitting
+underneath the navigation bar; it now sits above it. `Rate \u20b9` prints as
+**Rate ₹**.
+
+**Purple and white.** One palette, defined once: `#6D28D9`, `#4C1D95`,
+`#EDE9FE`, background `#F8F7FC`, text `#1F2937` and `#6B7280`. Every orange
+button, border, focus ring and active state is purple. The SIE letterhead and
+the tricolour rule under the masthead are untouched. Red, amber and green are
+kept for what they mean — out of stock, low stock, available, and the three
+urgency levels. Product names, prices, dates and quotation numbers are set in
+Inter rather than a typewriter face, with tabular figures so columns still line
+up. Faded grey text is darkened to `#374151`. Prices read `₹34,650`, and a
+product with no price says **Price not set** rather than pretending to be free.
+
+**Fields that were never styled.** `input[type=text]` matches the attribute, not
+the default, so every field written as a bare `<input>` — most of Settings, the
+party form, the purchase editor — had no width, padding or border. They are all
+styled now.
+
+**Catalogue.** "Recently used" is gone. Products are reached through categories
+and search only, on twelve shelves: Sliding Gate Motors, Swing Gate Motors,
+Shutter Motors, High-Speed Door Motors, Boom Barriers, Garage Door Motors,
+Automatic/Glass Door Systems, Gate Motor Accessories, Sensors & Safety Devices,
+Control Boards Receivers & Remotes, Gate Hardware, Other Products. The three
+retired shelves resolve to their nearest surviving one, so no product loses the
+category an administrator filed it on and no product id changes. Cards are
+compact: model, short description, price or Price not set, a quantity stepper
+and an Add button. Adding a product that is already in the quotation raises its
+quantity; it never creates a second line, in the quotation or in stock.
+
+**Quotation lines.** Each line shows name, description, quantity, rate, line
+total, a pencil and a remove icon. The pencil opens a proper editor with the
+name, description, quantity and rate, and Save and Cancel. It writes to that
+quotation line only — the catalogue product keeps its own name and price.
+Quantity and rate changes recalculate the line, subtotal, GST and grand total
+immediately. Dealer, Contractor and Client switching stays inside the panel and
+reprices at once. A product with no price on the current rate type goes in
+flagged **Rate needed** and opens its editor, so a missing price is typed in
+rather than silently becoming zero. Removing a line asks first, and offers Undo.
+
+**Our Stock.** Total stocked products, low stock and out of stock across the
+top. Search, category filter and status filter. Add stock searches the catalogue
+and attaches to the product's own id, so nothing is ever duplicated, with a
+shortcut to Product management for something genuinely new. Stock in, Stock out
+and Edit on every row, with a reorder level and an optional reason. Stock can
+never go below zero. Every movement is written to the ledger — previous
+quantity, the change, the new quantity, the action, the note, the person's name
+and UID, and the server's own timestamp — in the same Firestore transaction as
+the quantity itself, so the two can never disagree. Staff move stock in and out
+and set reorder levels; correcting a figure outright or stopping tracking is
+admin-only, enforced in the rules and not merely by hiding a button. Green,
+amber and red mark available, low and out.
+
+**Parties.** Clients, dealers and contractors, with company name, contact
+person, phone, GSTIN, email, city and full address. Searchable on all of them.
+Likely duplicates are caught on normalised GSTIN, phone and company name, and
+you are told which one matched and offered the chance to update the existing
+party instead. Each party lists the quotations connected to it. Party ids are
+stable, and a finalised quotation keeps its own copy of the details, so editing
+a party later never rewrites history. Archive is the ordinary route; only an
+administrator deletes.
+
+**Purchase.** Entry is manual, with no catalogue picker. The three urgency cards
+are single-select and belong to the Add form alone. The list filters sit in
+their own **Filter requirements** block, default to **All urgency**, and can no
+longer change what the Add form has selected. The badge counts open
+requirements only — received, cancelled and completed are excluded — and the
+More menu carries no badge at all. Received, Cancelled, Reopen and Undo all
+work, a cancelled requirement never shows as received, and every creation and
+status change records the name, the UID and the time. Received and cancelled
+entries live on their own Purchase history screen.
+
+**Numbering and history.** Opening or closing a blank draft still costs nothing;
+the number is taken only when Finalise is pressed, in a single Firestore
+transaction that writes the counter and the quotation together. `SIE/2026-27/003`
+is unchanged. A failed finalisation reports the error and leaves the quotation a
+draft. Quotation history searches by number, party or site, filters by date,
+party, status and rate type, shows the draft you are working on, and offers
+View, PDF, Duplicate and — for an administrator — Cancel. A finalised record
+holds the full snapshot: number, date, financial year, creator, rate type, party
+id and details, site, items, quantities, rates, totals, transportation, GST and
+status.
+
+**More and Settings.** The three-line More menu holds Parties, Products
+management, Categories management, Quotation history, Purchase history, Stock
+movement history, Team, Settings, About & legal, Install app (only when the
+browser genuinely offers one) and Sign out. Categories management is its own
+screen. Settings adds payment terms, warranty text, a PDF footer note and a
+default reorder level, alongside the company details, GSTIN, prefix, financial
+year, default GST, default rate type and validity. Values are validated —
+company name, prefix shape, financial year, GSTIN, phone, email, GST range and
+reorder level — and shared settings stay admin-only.
+
+**The PDF.** The letterhead, the configured company block, quotation number and
+date, rate basis, party and site, GSTIN and contact details, then a clean table
+with description, quantity, rate and amount. Transportation is shown beside the
+subtotal rather than pretending to be a product. Validity, payment terms and
+warranty print in their own block, the footer note prints on every page, and the
+signature area is unchanged. The table header repeats at the top of every page
+the table runs on to; notes and terms fall back to a flowing layout if they are
+too tall for one page, so nothing is cut off. Text is darker, the rupee sign is
+correct, amounts are in Indian format, and empty optional fields are simply not
+printed. Download PDF and Copy for WhatsApp both still work, and the WhatsApp
+copy now carries rates, transportation, validity, payment terms and warranty.
+
+**Reliability.** A status chip in the masthead reads Syncing…, Synced, Offline
+or Sign-in unavailable. A loading screen covers the first paint. Finalise,
+archive, cancel, delete and any direct stock correction ask first. Quantities,
+prices, phone numbers and GSTINs are validated, negatives are refused, buttons
+that cannot be used are disabled and empty states explain what to do. Modal
+forms scroll internally with their Save button pinned, so the keyboard never
+buries it. Sections restore their scroll position, and a back-to-top button
+appears once you have scrolled.
+
+**PWA.** Cache renamed `smartie-quote-desk-v8b`, older caches removed on
+activation. A new upload shows **Update available — Refresh** instead of taking
+over on its own, and refuses to reload over an unfinished quotation without
+asking. Install appears only when the browser really offers it and never in
+standalone mode. Paths stay relative, so the app runs from `/quote-desk/` on
+GitHub Pages as well as from a domain root, and the app shell still loads with
+no signal. No signed-in user data is cached by the service worker.
+
+---
+
+## Patch notes — V8B1
+
+A repair pass on V8B. No feature is removed or redesigned, and
+`firestore.rules` and `firestore.indexes.json` are byte-identical to V8B — if
+those are already published, nothing needs deploying again.
+
+**Cancellations now reach every device.** `watchQuotes()` decided a document
+had changed by comparing its `at` value. Cancelling a quotation touches only
+`status`, `cancelledBy` and `cancelledAt` — never `at` — so to every other
+signed-in device the record looked unchanged and the cancellation was dropped.
+The listener now works from Firestore's own change list, so any added or
+modified quotation is merged whatever changed in it, and the History screen
+repaints the moment it arrives. A record that comes back un-cancelled also has
+its old `cancelledBy` and `cancelledAt` cleared, rather than keeping a stale
+cancellation from the merge.
+
+**A party is saved only when you say so.** Finalising used to quietly write a
+party into the Parties list from whatever was typed on the quotation, so
+one-off walk-in customers accumulated there. It no longer does. A party joins
+the list only when **Save this customer** is pressed or an already-saved party
+is chosen. When the details on screen do match a party that is already saved,
+the quotation is linked to that party's stable `partyId` — and the link is set
+before the record is built, so the id is inside the atomic finalisation
+transaction rather than being patched on afterwards. The quotation still keeps
+its own full copy of the party details, so editing or renaming the party later
+never alters an old quotation. Re-issuing an old PDF from History also restores
+the working draft's party link when it finishes.
+
+**V8A stock uploads cleanly.** `fbPushStock()` — the migration path behind
+*Upload this device's records to the team* — wrote no `lastAction`, which the
+V8B rules require from a member of staff, so an authorised staff upload was
+refused. Every upload now carries a valid staff action (`add` for a V8A figure
+that has none recorded, and for an admin-only action a staff member is
+re-uploading), along with `key`, `byUid` and a server timestamp. Quantities are
+clamped at zero on the way up, on the way down from the team, and when a
+movement is written, so no path can leave a negative figure — matching what the
+rules already enforce.
+
+**Parties deleted elsewhere disappear here.** `watchCustomers()` never noticed a
+removed document, so a party an administrator deleted stayed on every other
+device until it was reloaded. Removals are handled now, and an archive or a
+restore made on another device lands the same way.
+
+**Service worker.** Cache renamed `smartie-quote-desk-v8b1`, so installed
+phones are offered the repaired version.
+
+---
+
+## Patch notes — V8B2
+
+One fix. `firestore.rules` and `firestore.indexes.json` are unchanged again, so
+nothing needs deploying if the V8B versions are already published.
+
+**A quotation can no longer be linked to the wrong party.** Choosing a saved
+party set `state.partyId`, and that id stayed put even if the company name,
+GSTIN, phone, city, contact, email or address were then typed over — so a
+quotation for one customer could be filed against another. Three things now
+keep the link honest:
+
+* Editing any of those seven fields by hand drops the link there and then, and
+  saves the draft in that state. Filling the fields from a saved party sets
+  their values directly, which fires no input event, so choosing a party still
+  links it correctly and a restored draft keeps the link it was saved with.
+* **Save this customer** sets the saved party's own id, as before.
+* Finalisation works the link out again from what is on the form at that
+  moment. The party that was picked keeps the link only while the details still
+  identify it; otherwise the matching saved party is used, and if none matches,
+  the quotation is filed with no party id at all. A stale id is never carried
+  into the record.
+
+The rule for "these details are that party" — GSTIN first, then phone, then
+company name — is now written once and used both by the search for a match and
+by the check that an existing link still holds, so the two can never disagree.
+Nothing else changes: no party is created during finalisation, and the
+quotation still keeps its own copy of the party details, so editing the party
+later never rewrites an old quotation.
+
+**Service worker.** Cache renamed `smartie-quote-desk-v8b2`.
