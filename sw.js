@@ -3,7 +3,7 @@
    up the new version instead of serving the old one from its cache.
    Paths are relative, so the app works from a project sub-folder such as
    https://<user>.github.io/quote-desk/ as well as from a domain root. */
-const CACHE = 'smartie-quote-desk-v8c';
+const CACHE = 'smartie-quote-desk-v8c1';
 const SHELL = [
   './',
   './index.html',
