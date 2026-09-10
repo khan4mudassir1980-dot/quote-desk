@@ -1,59 +1,59 @@
 rules_version = '2';
 
-// SMARTIE Quote Desk — production Firestore rules (V8C)
-// ---------------------------------------------------------------------------
-// Paste this whole file into Firebase console -> Firestore Database -> Rules,
-// then press Publish. Never leave the project in test mode.
-//
-//   * Nobody who is not signed in reads or writes anything.
-//   * A signed-in person must also have a /users document with active = true.
-//   * Staff run the business: quotations, parties, stock in and out, purchase
-//     records, and taking the next quotation number.
-//   * Only admins touch products, categories, accounts, company settings,
-//     direct stock corrections and anything destructive.
-//   * Nobody promotes themselves to admin.
-//   * A missing product price is null and stays null. It is never silently
-//     accepted as zero.
-//   * An issued quotation number can never be edited or re-used.
-//   * A stock movement, once written, is a permanent record.
-//
-// V8C adds team-synced pinned stock and manual stock metadata. Nothing that
-// existed before is renamed or removed, so earlier data keeps working.
-// ---------------------------------------------------------------------------
+// SMARTIE Quote Desk — production Firestore rules (V8C2)
+// Owner: khan4mudassir1980@gmail.com
+// Roles: admin, staff, worker. Workers can read stock and create/edit only
+// their own open purchase requirements. UI hiding is backed by these rules.
 
 service cloud.firestore {
   match /databases/{database}/documents {
+    function signedIn()   { return request.auth != null; }
+    function mine()       { return request.auth.uid; }
+    function profile()    { return get(/databases/$(database)/documents/users/$(mine())).data; }
+    function hasProfile() { return signedIn() && exists(/databases/$(database)/documents/users/$(mine())); }
+    function member()     { return hasProfile() && profile().active == true; }
+    function ownerEmail() { return signedIn() && request.auth.token.email == 'khan4mudassir1980@gmail.com'; }
+    function owner()      { return member() && ownerEmail(); }
+    function admin()      { return member() && (ownerEmail() || profile().role == 'admin'); }
+    function staff()      { return member() && profile().role == 'staff'; }
+    function worker()     { return member() && profile().role == 'worker'; }
+    function stockWriter(){ return admin() || staff(); }
+    function touched()    { return request.resource.data.diff(resource.data).affectedKeys(); }
+    function priceOk(v)   { return v == null || (v is number && v >= 0); }
 
-    // ---------------- helpers ----------------
-    function signedIn()  { return request.auth != null; }
-    function profile()   { return get(/databases/$(database)/documents/users/$(request.auth.uid)).data; }
-    function hasProfile(){ return signedIn() &&
-                           exists(/databases/$(database)/documents/users/$(request.auth.uid)); }
-    function member()    { return hasProfile() && profile().active == true; }
-    function admin()     { return member() && profile().role == 'admin'; }
-    function touched()   { return request.resource.data.diff(resource.data).affectedKeys(); }
-    function mine()      { return request.auth.uid; }
-
-    // A price is either a number of zero or more, or genuinely absent.
-    function priceOk(v)  { return v == null || (v is number && v >= 0); }
-
-    // ---------------- people ----------------
     match /users/{uid} {
-      allow read:   if member() || mine() == uid;
-      allow create: if admin()
-                    && request.resource.data.keys().hasAll(['name','email','role','active'])
-                    && request.resource.data.role in ['admin','staff']
-                    && request.resource.data.active is bool;
-      allow update: if admin()
-                    && request.resource.data.role in ['admin','staff']
-                    && !(mine() == uid && request.resource.data.active == false);
-      allow delete: if admin() && mine() != uid;
+      allow read: if (signedIn() && mine() == uid) || admin();
+
+      allow create: if request.resource.data.keys().hasAll(['name','email','role','active'])
+                    && request.resource.data.active is bool
+                    && (
+                      (owner() && request.resource.data.role in ['admin','staff','worker'])
+                      || (admin() && !owner() && request.resource.data.role in ['staff','worker'])
+                    );
+
+      allow update: if
+        // The Owner can manage everyone, but their own role and active state are protected.
+        (owner() && (
+          uid != mine()
+          || (request.resource.data.role == 'admin'
+              && request.resource.data.active == true
+              && request.resource.data.email == resource.data.email)
+        ))
+        ||
+        // A normal admin manages Staff and Workers only, never an Admin or the Owner.
+        (admin() && !owner()
+          && uid != mine()
+          && resource.data.role in ['staff','worker']
+          && request.resource.data.role in ['staff','worker']
+          && resource.data.email != 'khan4mudassir1980@gmail.com');
+
+      allow delete: if uid != mine()
+                    && resource.data.email != 'khan4mudassir1980@gmail.com'
+                    && (owner() || (admin() && !owner() && resource.data.role in ['staff','worker']));
     }
 
-    // ---------------- products and prices ----------------
-    // Everyone signed in reads the catalogue; only an admin changes it.
     match /products/{id} {
-      allow read: if member();
+      allow read: if member() && !worker();
       allow create, update: if admin()
                     && request.resource.data.model is string
                     && request.resource.data.model.size() > 0
@@ -68,41 +68,30 @@ service cloud.firestore {
                     && priceOk(request.resource.data.contractor)
                     && priceOk(request.resource.data.client)
                     && request.resource.data.active is bool;
-      // Archiving is the ordinary route; deletion stays available to an admin
-      // for a product that was created by mistake.
       allow delete: if admin();
     }
 
-    // ---------------- stock quantities ----------------
-    // Staff move stock in and out and set a reorder level. Only an admin
-    // corrects a figure outright or stops tracking an item, and the rule
-    // checks the recorded action rather than trusting the interface.
     match /stock/{key} {
       allow read: if member();
-      allow create: if member()
-                    && request.resource.data.q is number   && request.resource.data.q >= 0
+      allow create: if stockWriter()
+                    && request.resource.data.q is number && request.resource.data.q >= 0
                     && request.resource.data.min is number && request.resource.data.min >= 0
                     && request.resource.data.t is number
                     && request.resource.data.byUid == mine()
                     && (admin() || request.resource.data.lastAction in ['in','out','min','add','pin']);
-      allow update: if member()
-                    && request.resource.data.q is number   && request.resource.data.q >= 0
+      allow update: if stockWriter()
+                    && request.resource.data.q is number && request.resource.data.q >= 0
                     && request.resource.data.min is number && request.resource.data.min >= 0
                     && request.resource.data.t is number
                     && request.resource.data.byUid == mine()
                     && request.resource.data.key == resource.data.key
                     && (admin() || request.resource.data.lastAction in ['in','out','min','add','pin']);
-      // A quantity is archived (off = 1), never deleted, so its ledger still
-      // makes sense. Only an admin may remove the document itself.
       allow delete: if admin();
     }
 
-    // ---------------- stock movement ledger ----------------
-    // Written in the same transaction as the quantity above. Once a movement
-    // is recorded it is permanent: nobody edits or deletes history.
     match /stockMoves/{id} {
-      allow read: if member();
-      allow create: if member()
+      allow read: if member() && !worker();
+      allow create: if stockWriter()
                     && request.resource.data.id == id
                     && request.resource.data.key is string
                     && request.resource.data.action in ['in','out','set','min','add','archive']
@@ -111,53 +100,56 @@ service cloud.firestore {
                     && request.resource.data.next >= 0
                     && request.resource.data.at is number
                     && request.resource.data.byUid == mine()
-                    // only an admin records a correction or stops tracking
                     && (admin() || request.resource.data.action in ['in','out','min','add']);
-      allow update: if false;
-      allow delete: if false;
+      allow update, delete: if false;
     }
 
-    // ---------------- purchase requirements and history ----------------
     match /purchase/{id} {
       allow read: if member();
       allow create: if member()
                     && request.resource.data.id == id
+                    && request.resource.data.byUid == mine()
                     && request.resource.data.qty is number && request.resource.data.qty > 0
+                    && request.resource.data.status == 'Needed'
+                    && (!request.resource.data.keys().hasAny(['received']) || request.resource.data.received == false)
+                    && request.resource.data.urgency in ['critical','urgent','normal']
                     && request.resource.data.updated is number;
-      allow update: if member()
-                    && request.resource.data.id == id
-                    && request.resource.data.qty is number && request.resource.data.qty > 0
-                    && request.resource.data.updated is number;
-      // Staff cancel a requirement; only an admin removes the record.
+      allow update: if
+        (member() && !worker()
+          && request.resource.data.id == id
+          && request.resource.data.qty is number && request.resource.data.qty > 0
+          && request.resource.data.updated is number)
+        ||
+        (worker()
+          && resource.data.byUid == mine()
+          && request.resource.data.byUid == mine()
+          && (!resource.data.keys().hasAny(['received']) || resource.data.received == false)
+          && resource.data.status in ['Needed','Ordered']
+          && request.resource.data.status == resource.data.status
+          && request.resource.data.qty is number && request.resource.data.qty > 0
+          && touched().hasOnly(['name','qty','urgency','note','updated','upBy','upUid','serverAt']));
       allow delete: if admin();
     }
 
-    // ---------------- parties (clients, dealers, contractors) ----------------
-    // Staff may add a party and top up its details from a quotation. Only an
-    // admin may rewrite or archive one that already exists, or delete it.
     match /customers/{id} {
-      allow read:   if member();
-      allow create: if member()
+      allow read: if member() && !worker();
+      allow create: if member() && !worker()
                     && request.resource.data.id == id
                     && request.resource.data.name is string
                     && request.resource.data.name.size() > 0;
       allow update: if request.resource.data.id == id && (
-                       admin()
-                       || (member()
-                           && request.resource.data.name == resource.data.name
-                           && resource.data.archived != true
-                           && request.resource.data.archived != true)
+                      admin()
+                      || (staff()
+                          && request.resource.data.name == resource.data.name
+                          && resource.data.archived != true
+                          && request.resource.data.archived != true)
                     );
       allow delete: if admin();
     }
 
-    // ---------------- finalised quotations ----------------
-    // A record of what was issued. Once written, the number, the totals and
-    // the author are fixed. An admin may mark one cancelled; the number is
-    // still spent and never comes back.
     match /quotations/{id} {
-      allow read:   if member();
-      allow create: if member()
+      allow read: if member() && !worker();
+      allow create: if member() && !worker()
                     && request.resource.data.id == id
                     && request.resource.data.no is string
                     && request.resource.data.byUid == mine()
@@ -170,81 +162,58 @@ service cloud.firestore {
       allow delete: if false;
     }
 
-    // ---------------- shared settings ----------------
-    // Written as separate, non-overlapping matches. Firestore ORs its allow
-    // statements together, so a broad "if admin()" beside a narrow rule would
-    // simply cancel the narrow one out. Each document therefore gets its own
-    // block with every condition stated in full.
-
-    // The quotation counter.
     match /teamSettings/numbering {
-      allow read: if member();
-
-      // Seeding it once — from Settings, or by an admin's first finalisation,
-      // which writes the complete final state in a single set().
+      allow read: if member() && !worker();
       allow create: if admin()
-                    && request.resource.data.next is number
-                    && request.resource.data.next >= 1
+                    && request.resource.data.next is number && request.resource.data.next >= 1
                     && request.resource.data.prefix is string
                     && request.resource.data.fy is string
                     && request.resource.data.pad is number;
-
       allow update: if
-        // (a) taking the next number during finalisation. Any active member
-        //     may do this, and may touch nothing but these two fields.
-        (
-          member()
+        (member() && !worker()
           && touched().hasOnly(['next','lastIssued'])
           && request.resource.data.next is number
           && request.resource.data.next == resource.data.next + 1
           && request.resource.data.prefix == resource.data.prefix
           && request.resource.data.fy == resource.data.fy
           && request.resource.data.pad == resource.data.pad
-          && request.resource.data.lastIssued.uid == mine()
-        )
+          && request.resource.data.lastIssued.uid == mine())
         ||
-        // (b) an admin setting the prefix, financial year or padding. Within
-        //     the same year the counter may never move backwards, so an
-        //     issued number cannot be handed out twice.
-        (
-          admin()
-          && request.resource.data.next is number
-          && request.resource.data.next >= 1
+        (admin()
+          && request.resource.data.next is number && request.resource.data.next >= 1
           && request.resource.data.prefix is string
           && request.resource.data.fy is string
-          && (
-               request.resource.data.fy != resource.data.fy
-               || request.resource.data.next >= resource.data.next
-             )
-        );
-
-      allow delete: if false;          // the counter is never deleted
+          && (request.resource.data.fy != resource.data.fy
+              || request.resource.data.next >= resource.data.next));
+      allow delete: if false;
     }
 
-    // Company details, terms, notes, payment terms, warranty, footer note and
-    // the default reorder level — everything the quotation prints or assumes.
     match /teamSettings/company {
-      allow read: if member();
+      allow read: if member() && !worker();
       allow create, update: if admin();
       allow delete: if false;
     }
 
-    // Catalogue categories: names, order and archived flags. Products are not
-    // stored here — each product carries its own categoryId.
     match /teamSettings/categories {
-      allow read:   if member();
-      allow create, update: if admin()
-                    && request.resource.data.map is map;
+      allow read: if member() && !worker();
+      allow create, update: if admin() && request.resource.data.map is map;
       allow delete: if false;
     }
 
-    // Nothing else lives under teamSettings.
     match /teamSettings/{other} {
-      allow read: if member();
+      allow read: if member() && !worker();
       allow write: if false;
     }
 
-    // ---------------- everything else ----------------
+    match /teamAudit/{id} {
+      allow read: if admin();
+      allow create: if admin()
+                    && request.resource.data.id == id
+                    && request.resource.data.byUid == mine()
+                    && request.resource.data.at is number;
+      allow update, delete: if false;
+    }
+
     match /{document=**} {
       allow read, write: if false;
     }

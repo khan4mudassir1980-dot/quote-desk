@@ -4,17 +4,18 @@ Your Firebase project already works. This covers what you must do to bring the
 current build live, followed by the history of every earlier release.
 
 **Project:** `smartie-quote-desk`
-**Current version:** V8C
-**Service-worker cache:** `smartie-quote-desk-v8c`
+**Current version:** V8C2
+**Service-worker cache:** `smartie-quote-desk-v8c2`
 
 ---
 
-## V8C — what you must do
+## V8C2 — what you must do
 
-V8C keeps all existing products, prices, users, stock, purchases, parties and
-quotations. It adds manual stock metadata and team-synced pinned stock.
+V8C2 keeps all existing products, prices, users, stock, purchases, parties and
+quotations. It adds the Worker role, server-enforced role permissions, compact
+team management, stock notes/quick controls and the redesigned quotation PDF.
 
-### 1. Publish the V8C rules
+### 1. Publish the V8C2 rules
 
 From PowerShell opened inside this extracted folder:
 
@@ -22,17 +23,19 @@ From PowerShell opened inside this extracted folder:
 firebase.cmd deploy --only firestore:rules --project smartie-quote-desk
 ```
 
-The rules add the safe `pin` stock action. No collection is deleted or renamed.
+The rules add `worker` access and protect Products, prices, quotations, parties,
+stock changes and administration on the server. They also add an immutable
+`teamAudit` log. No existing collection is deleted or renamed.
 
 `firestore.indexes.json` now contains only the three composite indexes Firebase
 actually needs. The two unnecessary single-field entries that previously caused
 HTTP 400 have been removed. If your three composite indexes are already live,
 you do not need to deploy indexes again.
 
-### 2. Upload the V8C files
+### 2. Upload the V8C2 files
 
 Replace the repository files with the contents of this ZIP and commit them.
-The cache name changed to `smartie-quote-desk-v8c`, so phones will receive the
+The cache name changed to `smartie-quote-desk-v8c2`, so phones will receive the
 new build through the normal **Update available** flow.
 
 ---
@@ -169,8 +172,9 @@ rules enforce it too: a price must be a number of zero or more, or absent.
 synchronised with the header. Catalogue lines reprice; manual items and any rate
 you typed over are left exactly as they are.
 
-**Finalising.** A number is spent only when you press **Finalise quotation**, or
-download a PDF and confirm. Drafts, edits and previews cost nothing.
+**Issuing a quotation.** There is no separate Finalise button. A number is spent
+only when you download the PDF, print, or copy the quotation for WhatsApp and
+confirm. Drafts and edits cost nothing.
 Re-downloading keeps the same number. With Firebase selected the number comes
 from a Firestore transaction and there is **deliberately no local fallback** —
 if the counter cannot be reached, nothing is issued. That is the only way to
@@ -751,3 +755,29 @@ later never rewrites an old quotation.
 * The two invalid single-field index declarations were removed; only the three
   required composite indexes remain.
 * Service-worker cache renamed `smartie-quote-desk-v8c`.
+
+---
+
+## Patch notes — V8C2
+
+* The app shows a sign-in screen only until a valid team account is active.
+* Added **Worker**: Purchase Requirements plus read-only Our Stock. Workers can
+  add requirements and edit only their own open requirements; Firestore rules
+  enforce the same limits.
+* The Owner account `khan4mudassir1980@gmail.com` is protected from demotion,
+  switch-off and deletion. Only the Owner can promote another Administrator.
+* Team management is compact, searchable and filterable. It uses a role menu,
+  account toggle and typed-name confirmation for permanent team-access removal.
+* **Data & Sync Settings** is a small collapsed Owner-only panel.
+* Stock cards have quick +/− controls, permanent stock notes, Undo after normal
+  movements, and a confirmed **Mark out of stock** action that sets the balance
+  to zero without allowing a negative quantity.
+* Workers see stock quantities and low/out summaries, but no stock-changing,
+  pinning or movement-history controls.
+* Pinned stock appears once at the top rather than being duplicated below.
+* Pinch/double-tap zoom is disabled and mobile form fields stay at 16 px.
+* The downloaded quotation PDF now has separate Model/Product and Description
+  columns, clearer customer and quotation panels, a stronger totals block,
+  amount in words, repeated table headers and a cleaner filename. No PDF preview
+  screen was added.
+* Service-worker cache renamed `smartie-quote-desk-v8c2`.
