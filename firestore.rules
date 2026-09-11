@@ -1,6 +1,6 @@
 rules_version = '2';
 
-// SMARTIE Quote Desk — production Firestore rules (V8C3)
+// SMARTIE Quote Desk — production Firestore rules (V8C4)
 // Owner: khan4mudassir1980@gmail.com
 // Roles: owner, admin, staff, worker. Workers can read stock and create/edit only
 // their own open purchase requirements. UI hiding is backed by these rules.
@@ -45,7 +45,7 @@ service cloud.firestore {
             // Appoint the one registered second Owner in the same atomic write.
             || (resource.data.role != 'owner' && request.resource.data.role == 'owner'
                 && getAfter(/databases/$(database)/documents/teamSettings/access).data.secondOwnerUid == uid)
-            // Emergency revoke also clears the single protected slot.
+            // Demotion or emergency revoke also clears the protected slot.
             || (resource.data.role == 'owner' && request.resource.data.role != 'owner'
                 && getAfter(/databases/$(database)/documents/teamSettings/access).data.secondOwnerUid != uid)
           ))
