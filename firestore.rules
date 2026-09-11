@@ -1,8 +1,8 @@
 rules_version = '2';
 
-// SMARTIE Quote Desk — production Firestore rules (V8C2)
+// SMARTIE Quote Desk — production Firestore rules (V8C3)
 // Owner: khan4mudassir1980@gmail.com
-// Roles: admin, staff, worker. Workers can read stock and create/edit only
+// Roles: owner, admin, staff, worker. Workers can read stock and create/edit only
 // their own open purchase requirements. UI hiding is backed by these rules.
 
 service cloud.firestore {
@@ -13,8 +13,8 @@ service cloud.firestore {
     function hasProfile() { return signedIn() && exists(/databases/$(database)/documents/users/$(mine())); }
     function member()     { return hasProfile() && profile().active == true; }
     function ownerEmail() { return signedIn() && request.auth.token.email == 'khan4mudassir1980@gmail.com'; }
-    function owner()      { return member() && ownerEmail(); }
-    function admin()      { return member() && (ownerEmail() || profile().role == 'admin'); }
+    function owner()      { return member() && (ownerEmail() || profile().role == 'owner'); }
+    function admin()      { return member() && (ownerEmail() || profile().role in ['owner','admin']); }
     function staff()      { return member() && profile().role == 'staff'; }
     function worker()     { return member() && profile().role == 'worker'; }
     function stockWriter(){ return admin() || staff(); }
@@ -24,31 +24,50 @@ service cloud.firestore {
     match /users/{uid} {
       allow read: if (signedIn() && mine() == uid) || admin();
 
-      allow create: if request.resource.data.keys().hasAll(['name','email','role','active'])
-                    && request.resource.data.active is bool
-                    && (
-                      (owner() && request.resource.data.role in ['admin','staff','worker'])
-                      || (admin() && !owner() && request.resource.data.role in ['staff','worker'])
-                    );
+      // First Google login creates only the caller's own protected profile:
+      // the original business owner becomes Owner; everybody else Worker.
+      allow create: if signedIn() && uid == mine()
+                    && request.resource.data.keys().hasAll(['name','email','role','active'])
+                    && request.resource.data.email == request.auth.token.email
+                    && request.resource.data.active == true
+                    && ((ownerEmail() && request.resource.data.role == 'owner')
+                        || (!ownerEmail() && request.resource.data.role == 'worker'));
 
       allow update: if
-        // The Owner can manage everyone, but their own role and active state are protected.
-        (owner() && (
-          uid != mine()
-          || (request.resource.data.role == 'admin'
-              && request.resource.data.active == true
-              && request.resource.data.email == resource.data.email)
-        ))
+        // The original owner can manage non-owner accounts and is the only
+        // person who may appoint or emergency-revoke the protected second owner.
+        (owner() && ownerEmail() && uid != mine()
+          && resource.data.email != 'khan4mudassir1980@gmail.com'
+          && request.resource.data.email == resource.data.email
+          && (
+            // Normal member management.
+            (resource.data.role != 'owner' && request.resource.data.role != 'owner')
+            // Appoint the one registered second Owner in the same atomic write.
+            || (resource.data.role != 'owner' && request.resource.data.role == 'owner'
+                && getAfter(/databases/$(database)/documents/teamSettings/access).data.secondOwnerUid == uid)
+            // Emergency revoke also clears the single protected slot.
+            || (resource.data.role == 'owner' && request.resource.data.role != 'owner'
+                && getAfter(/databases/$(database)/documents/teamSettings/access).data.secondOwnerUid != uid)
+          ))
         ||
-        // A normal admin manages Staff and Workers only, never an Admin or the Owner.
+        // A second Owner has full app control, but never over either Owner.
+        (owner() && !ownerEmail()
+          && uid != mine()
+          && resource.data.role != 'owner'
+          && resource.data.email != 'khan4mudassir1980@gmail.com'
+          && request.resource.data.role in ['admin','staff','worker']
+          && request.resource.data.email == resource.data.email)
+        ||
+        // A normal Administrator changes Worker <-> Staff only.
         (admin() && !owner()
           && uid != mine()
           && resource.data.role in ['staff','worker']
           && request.resource.data.role in ['staff','worker']
-          && resource.data.email != 'khan4mudassir1980@gmail.com');
+          && request.resource.data.email == resource.data.email);
 
       allow delete: if uid != mine()
                     && resource.data.email != 'khan4mudassir1980@gmail.com'
+                    && resource.data.role != 'owner'
                     && (owner() || (admin() && !owner() && resource.data.role in ['staff','worker']));
     }
 
@@ -197,6 +216,21 @@ service cloud.firestore {
     match /teamSettings/categories {
       allow read: if member() && !worker();
       allow create, update: if admin() && request.resource.data.map is map;
+      allow delete: if false;
+    }
+
+    match /teamSettings/productPins {
+      allow read: if member() && !worker();
+      allow create, update: if admin()
+                            && request.resource.data.keys is list
+                            && request.resource.data.keys.size() <= 15;
+      allow delete: if false;
+    }
+
+    match /teamSettings/access {
+      allow read: if admin();
+      allow create, update: if owner() && ownerEmail()
+                            && request.resource.data.secondOwnerUid is string;
       allow delete: if false;
     }
 

@@ -4,8 +4,24 @@ Your Firebase project already works. This covers what you must do to bring the
 current build live, followed by the history of every earlier release.
 
 **Project:** `smartie-quote-desk`
-**Current version:** V8C2
-**Service-worker cache:** `smartie-quote-desk-v8c2`
+**Current version:** V8C3
+**Service-worker cache:** `smartie-quote-desk-v8c3`
+
+## V8C3 — one-time Google sign-in setup
+
+Before opening V8C3 for the team:
+
+1. Firebase Console → **Authentication** → **Sign-in method**.
+2. Enable **Google**, choose the support email, and save.
+3. Authentication → **Settings** → **Authorized domains**: confirm the GitHub Pages domain (and any custom domain) is listed.
+4. Upload every V8C3 file to GitHub, not only `index.html`.
+5. Publish the included rules:
+
+   `firebase.cmd deploy --only firestore:rules --project smartie-quote-desk`
+
+The first Google login for `khan4mudassir1980@gmail.com` becomes the protected original **Owner / Administrator**. Every other new or previously removed Google account starts as an active **Worker**. Disabled profiles remain disabled. Owners and Administrators can then assign permitted roles from Team → People.
+
+V8C3 also adds a shared 15-product pinned shelf, protected two-owner model, active/disabled People grouping, compact activity history, and card-level stock drafts (`+ / −`, then `Done`).
 
 ---
 
